@@ -11,7 +11,7 @@ import (
 	openai "github.com/sashabaranov/go-openai"
 )
 
-const apiKey = "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"
+const apiKey = "OPEN_AI_KEY"
 
 func main() {
 	// Read the document
