@@ -6,11 +6,42 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"strconv"
 	"strings"
 
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/xyproto/ollamaclient"
 )
+
+type chapter struct {
+	Number     int
+	Title      string
+	QuickBrief string
+	Content    string
+}
+
+func newChapter(number int, title string, quickBrief string, content string) *chapter {
+	newChapter := chapter{Number: number, Title: title, QuickBrief: quickBrief, Content: content}
+	return &newChapter
+}
+
+func buildNewChapter(rawContent string) *chapter {
+	lines := strings.Split(rawContent, "\n")
+
+	chapterNumber := lines[0]
+	chapterTitle := lines[1]
+	summary := lines[2]
+	content := strings.Join(lines[3:], "\n")
+
+	i, err := strconv.Atoi(chapterNumber)
+	if err != nil {
+		// ... handle error
+		panic(err)
+	}
+
+	newChapter := chapter{Number: i, Title: chapterTitle, QuickBrief: summary, Content: content}
+	return &newChapter
+}
 
 const apiKey = "OPEN_AI_KEY"
 
@@ -22,24 +53,25 @@ func main() {
 	}
 
 	// Split the document into chapters using regex
-	chapters := splitIntoChapters(string(content))
+	//chapters := splitIntoChapters(string(content))
+	chapters := splitIntoChapterList(string(content))
 
-	log.Printf("------------ Chapter count: %d ------------\n", len(chapters))
+	log.Printf("------------ Chapter count: %d ------------\n", len(*chapters))
 
 	// Initialize the OpenAI client
 	//client := openai.NewClient(apiKey)
 
 	// Summarize each chapter
 	var summaries []string
-	summaries = append(summaries, fmt.Sprintf("------------ Total chapters: %d ------------\n", len(chapters)))
-	for i, chapter := range chapters {
+	summaries = append(summaries, fmt.Sprintf("------------ Total chapters: %d ------------\n", len(*chapters)))
+	for i, chapter := range *chapters {
 		// summary, err := summarizeChapter(client, chapter)
-		summary, err := summarizeChapter_ollama(chapter)
+		summary, err := summarizeChapter_ollama(&chapter)
 		if err != nil {
 			log.Printf("Failed to summarize chapter %d: %v", i+1, err)
 			continue
 		}
-		summaries = append(summaries, fmt.Sprintf("--- Summary of Chapter %d: \n%s\n", i+1, summary))
+		summaries = append(summaries, fmt.Sprintf("--- Summary of Chapter %d:\n%s\n", i+1, summary))
 	}
 
 	// Combine summaries
@@ -52,6 +84,23 @@ func main() {
 	}
 
 	fmt.Println("File written successfully")
+}
+
+func splitIntoChapterList(content string) *[]chapter {
+	re := regexp.MustCompile(`(?m)^\d+\n(?:[^\n]+\n)+`)
+	matches := re.FindAllStringIndex(content, -1)
+	var chapters []chapter
+	for i, match := range matches {
+		start := match[0]
+		end := len(content)
+		if i+1 < len(matches) {
+			end = matches[i+1][0]
+		}
+
+		chapters = append(chapters, *buildNewChapter(content[start:end]))
+	}
+
+	return &chapters
 }
 
 func splitIntoChapters(content string) []string {
@@ -72,7 +121,7 @@ func splitIntoChapters(content string) []string {
 	return chapters
 }
 
-func summarizeChapter_ollama(chapter string) (string, error) {
+func summarizeChapter_ollama(chapter *chapter) (string, error) {
 	oc := ollamaclient.NewWithModel("mistral:latest")
 
 	oc.Verbose = false
@@ -82,7 +131,7 @@ func summarizeChapter_ollama(chapter string) (string, error) {
 		return "Error", err
 	}
 
-	prompt := fmt.Sprintf("Summarize the following chapter:\n\n%s", chapter)
+	prompt := fmt.Sprintf("Summarize this chapter with title %s and brief %s and content %s", chapter.Title, chapter.QuickBrief, chapter.Content)
 	output, err := oc.GetOutput(prompt)
 	if err != nil {
 		fmt.Println("Error:", err)
