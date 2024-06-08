@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	openai "github.com/sashabaranov/go-openai"
+	"github.com/xyproto/ollamaclient"
 )
 
 const apiKey = "OPEN_AI_KEY"
@@ -23,21 +24,22 @@ func main() {
 	// Split the document into chapters using regex
 	chapters := splitIntoChapters(string(content))
 
-	log.Printf("Chapter count: %d", len(chapters))
+	log.Printf("------------ Chapter count: %d ------------\n", len(chapters))
 
 	// Initialize the OpenAI client
-	client := openai.NewClient(apiKey)
+	//client := openai.NewClient(apiKey)
 
 	// Summarize each chapter
 	var summaries []string
-	summaries = append(summaries, fmt.Sprintf("Total chapters: %d", len(chapters)))
+	summaries = append(summaries, fmt.Sprintf("------------ Total chapters: %d ------------\n", len(chapters)))
 	for i, chapter := range chapters {
-		summary, err := summarizeChapter(client, chapter)
+		// summary, err := summarizeChapter(client, chapter)
+		summary, err := summarizeChapter_ollama(chapter)
 		if err != nil {
 			log.Printf("Failed to summarize chapter %d: %v", i+1, err)
 			continue
 		}
-		summaries = append(summaries, fmt.Sprintf("Summary of Chapter %d: %s", i+1, summary))
+		summaries = append(summaries, fmt.Sprintf("--- Summary of Chapter %d: \n%s\n", i+1, summary))
 	}
 
 	// Combine summaries
@@ -68,6 +70,27 @@ func splitIntoChapters(content string) []string {
 	}
 
 	return chapters
+}
+
+func summarizeChapter_ollama(chapter string) (string, error) {
+	oc := ollamaclient.NewWithModel("mistral:latest")
+
+	oc.Verbose = false
+
+	if err := oc.PullIfNeeded(); err != nil {
+		fmt.Println("Error:", err)
+		return "Error", err
+	}
+
+	prompt := fmt.Sprintf("Summarize the following chapter:\n\n%s", chapter)
+	output, err := oc.GetOutput(prompt)
+	if err != nil {
+		fmt.Println("Error:", err)
+		return "Error", err
+	}
+	fmt.Printf("\n---------------------\n%s\n", strings.TrimSpace(output))
+
+	return output, nil
 }
 
 func summarizeChapter(client *openai.Client, chapter string) (string, error) {

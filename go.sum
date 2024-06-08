@@ -1,2 +1,8 @@
+github.com/dustin/go-humanize v1.0.1 h1:GzkhY7T5VNhEkwH0PVJgjz+fX1rhBrR7pRT3mDkpeCY=
+github.com/dustin/go-humanize v1.0.1/go.mod h1:Mu1zIs6XwVuF/gI1OepvI0qD18qycQx+mFykh5fBlto=
 github.com/sashabaranov/go-openai v1.24.1 h1:DWK95XViNb+agQtuzsn+FyHhn3HQJ7Va8z04DQDJ1MI=
 github.com/sashabaranov/go-openai v1.24.1/go.mod h1:lj5b/K+zjTSFxVLijLSTDZuP7adOgerWeFyZLUhAKRg=
+github.com/xyproto/env/v2 v2.2.5 h1:FNrp56sptc7ebC2QpM8lqKSGEb3UoYUJZZFl4bmcrPs=
+github.com/xyproto/env/v2 v2.2.5/go.mod h1:F81ZEzu15s3TWUZJ1uzBl9iNeq9zcfHvxMkQJaLZUl0=
+github.com/xyproto/ollamaclient v1.9.3 h1:0bWwtdrKErAmoSLOHoF1d18k9TKQ4Sgd4NLEHxxohF0=
+github.com/xyproto/ollamaclient v1.9.3/go.mod h1:bxB7cGmnkA1VJidUp5rUIq8yi7+S2tIiKHzUsHlkdOM=
