@@ -6,8 +6,11 @@ import (
 	"log"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
+	"sync"
+	"time"
 
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/xyproto/ollamaclient"
@@ -20,10 +23,12 @@ type chapter struct {
 	Content    string
 }
 
-func newChapter(number int, title string, quickBrief string, content string) *chapter {
-	newChapter := chapter{Number: number, Title: title, QuickBrief: quickBrief, Content: content}
-	return &newChapter
+type chapterSummary struct {
+	Number  int
+	Content string
 }
+
+const apiKey = "----"
 
 func buildNewChapter(rawContent string) *chapter {
 	lines := strings.Split(rawContent, "\n")
@@ -43,8 +48,6 @@ func buildNewChapter(rawContent string) *chapter {
 	return &newChapter
 }
 
-const apiKey = "OPEN_AI_KEY"
-
 func main() {
 	// Read the document
 	content, err := os.ReadFile("TheArtOfThinkingClearly.txt")
@@ -53,29 +56,38 @@ func main() {
 	}
 
 	// Split the document into chapters using regex
-	//chapters := splitIntoChapters(string(content))
 	chapters := splitIntoChapterList(string(content))
 
-	log.Printf("------------ Chapter count: %d ------------\n", len(*chapters))
+	log.Printf("------------ Chapter count: %d ------------\n", len(chapters))
 
 	// Initialize the OpenAI client
-	//client := openai.NewClient(apiKey)
+	client := openai.NewClient(apiKey)
 
 	// Summarize each chapter
-	var summaries []string
-	summaries = append(summaries, fmt.Sprintf("------------ Total chapters: %d ------------\n", len(*chapters)))
-	for i, chapter := range *chapters {
-		// summary, err := summarizeChapter(client, chapter)
-		summary, err := summarizeChapter_ollama(&chapter)
-		if err != nil {
-			log.Printf("Failed to summarize chapter %d: %v", i+1, err)
-			continue
-		}
-		summaries = append(summaries, fmt.Sprintf("--- Summary of Chapter %d:\n%s\n", i+1, summary))
+	summaries := make([]chapterSummary, len(chapters))
+	var wg sync.WaitGroup
+	wg.Add(len(chapters))
+
+	for i, chapter := range chapters {
+		fmt.Printf("Adding worker %d. Title: %s\n", i, chapter.Title)
+		go worker(&wg, i, chapter, &summaries[i], client)
 	}
 
+	fmt.Printf("Waiting for %d workers to finish\n", len(chapters))
+	wg.Wait()
+	fmt.Println("All Workers Completed")
+
+	sort.Slice(summaries, func(i, j int) bool {
+		return summaries[i].Number < summaries[j].Number
+	})
+
+	var tempSummary []string
+
+	for _, summary := range summaries {
+		tempSummary = append(tempSummary, summary.Content)
+	}
 	// Combine summaries
-	finalSummary := strings.Join(summaries, "\n\n")
+	finalSummary := strings.Join(tempSummary, "\n\n")
 	fmt.Println("Final Summary:\n", finalSummary)
 	write_err := os.WriteFile("TheArtOfThinkingClearly_Summary.txt", []byte(finalSummary), 0644)
 	if write_err != nil {
@@ -86,7 +98,23 @@ func main() {
 	fmt.Println("File written successfully")
 }
 
-func splitIntoChapterList(content string) *[]chapter {
+func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapterSummary, client *openai.Client) {
+	defer wg.Done()
+
+	fmt.Printf("Worker %v (%s): Started\n", id, chapter.Title)
+	//summary, err := summarizeChapter_ollama(chapter)
+	summary, err := summarizeChapter_openai(client, chapter)
+	if err != nil {
+		log.Printf("Failed to summarize chapter %d: %v", chapter.Number, err)
+	}
+
+	chapterSummary.Number = chapter.Number //chapter.Number
+	chapterSummary.Content = summary       //summary
+	time.Sleep(time.Second)
+	fmt.Printf("Worker %v (%s): Finished\n", id, chapter.Title)
+}
+
+func splitIntoChapterList(content string) []chapter {
 	re := regexp.MustCompile(`(?m)^\d+\n(?:[^\n]+\n)+`)
 	matches := re.FindAllStringIndex(content, -1)
 	var chapters []chapter
@@ -100,7 +128,7 @@ func splitIntoChapterList(content string) *[]chapter {
 		chapters = append(chapters, *buildNewChapter(content[start:end]))
 	}
 
-	return &chapters
+	return chapters
 }
 
 func splitIntoChapters(content string) []string {
@@ -121,7 +149,7 @@ func splitIntoChapters(content string) []string {
 	return chapters
 }
 
-func summarizeChapter_ollama(chapter *chapter) (string, error) {
+func summarizeChapter_ollama(chapter chapter) (string, error) {
 	oc := ollamaclient.NewWithModel("mistral:latest")
 
 	oc.Verbose = false
@@ -137,15 +165,17 @@ func summarizeChapter_ollama(chapter *chapter) (string, error) {
 		fmt.Println("Error:", err)
 		return "Error", err
 	}
-	fmt.Printf("\n---------------------\n%s\n", strings.TrimSpace(output))
+	//fmt.Printf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(output))
 
-	return output, nil
+	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(output))
+
+	return response, nil
 }
 
-func summarizeChapter(client *openai.Client, chapter string) (string, error) {
+func summarizeChapter_openai(client *openai.Client, chapter chapter) (string, error) {
 	req := openai.CompletionRequest{
-		Model:     "text-davinci-003",
-		Prompt:    fmt.Sprintf("Summarize the following chapter:\n\n%s", chapter),
+		Model:     "gpt-3.5-turbo-instruct",
+		Prompt:    fmt.Sprintf("Summarize this chapter with title %s and brief %s and content %s", chapter.Title, chapter.QuickBrief, chapter.Content),
 		MaxTokens: 200, // Adjust this based on your needs
 	}
 
@@ -154,5 +184,7 @@ func summarizeChapter(client *openai.Client, chapter string) (string, error) {
 		return "", err
 	}
 
-	return strings.TrimSpace(resp.Choices[0].Text), nil
+	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(resp.Choices[0].Text))
+
+	return response, nil
 }
