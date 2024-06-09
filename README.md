@@ -1,5 +1,4 @@
 # DocSum
-
 This project is a simple golang app that summarizes text by chunking the input file into paragraphs and then summarizing each paragraph using OpenAI API or Ollama API.
 
 ## Installation
