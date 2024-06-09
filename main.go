@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -51,6 +52,17 @@ func buildNewChapter(rawContent string) *chapter {
 func main() {
 	start := time.Now()
 
+	arg1 := flag.String("input", "TheArtOfThinkingClearly.txt", "input file")
+	arg2 := flag.String("output", "TheArtOfThinkingClearly_Summary.txt", "output file")
+	arg3 := flag.String("key", "", "OpenAI Key")
+
+	// Parse command-line arguments
+	flag.Parse()
+
+	fileName := *arg1
+	savedFile := *arg2
+	inputKey := *arg3
+
 	env := os.Getenv("DOCSUM_ENV")
 	if "" == env {
 		env = "development"
@@ -59,13 +71,27 @@ func main() {
 	godotenv.Load(".env." + env)
 	godotenv.Load() // The Original .env
 
-	secretKey := os.Getenv("SECRET_KEY")
+	secretKey := ""
+	if "" == inputKey {
+		secretKey = os.Getenv("SECRET_KEY")
+	} else {
+		secretKey = inputKey
+	}
+
+	if "" == secretKey {
+		return
+	}
 
 	directory := "bin"
-	filename := "TheArtOfThinkingClearly_Summary.txt"
+
+	if fileName == "" {
+		log.Printf("No Key Found")
+		return
+	}
+	//filename := "TheArtOfThinkingClearly_Summary.txt"
 
 	// Read the document
-	content, err := os.ReadFile("TheArtOfThinkingClearly.txt")
+	content, err := os.ReadFile(fileName)
 	if err != nil {
 		log.Fatalf("Failed to read document: %v", err)
 	}
@@ -104,7 +130,7 @@ func main() {
 
 	finalSummary := strings.Join(tempSummary, "\n\n")
 	log.Printf("Final Summary:\n", finalSummary)
-	write_err := SaveToFile(directory, filename, content)
+	write_err := SaveToFile(directory, savedFile, content)
 	if write_err != nil {
 		println("Error:", err)
 		return

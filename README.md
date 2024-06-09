@@ -5,4 +5,8 @@ This project is a simple golang app that summarizes text by chunking the input f
 ## Installation
 go mod download
 
+## Usage
+go run main.go -input <input_file> -output <output_file> -key <api_key>
+(or set key in .env file)
+
 # Summary
