@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/joho/godotenv"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/xyproto/ollamaclient"
 )
@@ -28,8 +29,6 @@ type chapterSummary struct {
 	Number  int
 	Content string
 }
-
-const apiKey = "------"
 
 func buildNewChapter(rawContent string) *chapter {
 	lines := strings.Split(rawContent, "\n")
@@ -50,6 +49,18 @@ func buildNewChapter(rawContent string) *chapter {
 }
 
 func main() {
+	start := time.Now()
+
+	env := os.Getenv("DOCSUM_ENV")
+	if "" == env {
+		env = "development"
+	}
+
+	godotenv.Load(".env." + env)
+	godotenv.Load() // The Original .env
+
+	secretKey := os.Getenv("SECRET_KEY")
+
 	directory := "bin"
 	filename := "TheArtOfThinkingClearly_Summary.txt"
 
@@ -65,7 +76,7 @@ func main() {
 	log.Printf("------------ Chapter count: %d ------------\n", len(chapters))
 
 	// Initialize the OpenAI client
-	client := openai.NewClient(apiKey)
+	client := openai.NewClient(secretKey)
 
 	// Summarize each chapter
 	summaries := make([]chapterSummary, len(chapters))
@@ -99,7 +110,9 @@ func main() {
 		return
 	}
 
-	log.Printf("File written successfully")
+	duration := time.Since(start)
+	log.Printf("Executed successfully in %s", duration)
+
 }
 
 func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapterSummary, client *openai.Client) {
