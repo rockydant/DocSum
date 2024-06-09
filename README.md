@@ -1,5 +1,11 @@
 # DocSum
+This project is a simple golang app that summarizes text by chunking the input file into paragraphs and then summarizing each paragraph using OpenAI API or Ollama API.
 
-This project is to use for study purpose.
+## Installation
+go mod download
 
-I am trying to get a concept of Golang project structure
+## Usage
+go run main.go -input <input_file> -output <output_file> -key <api_key>
+(or set key in .env file)
+
+# Summary
