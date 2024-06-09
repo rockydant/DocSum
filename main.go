@@ -29,7 +29,7 @@ type chapterSummary struct {
 	Content string
 }
 
-const apiKey = "sk-team2024-home-test-vP00R3HgNtYAroFA1rRbT3BlbkFJ6XTugV2XnCDwPKOnwg18"
+const apiKey = "------"
 
 func buildNewChapter(rawContent string) *chapter {
 	lines := strings.Split(rawContent, "\n")
