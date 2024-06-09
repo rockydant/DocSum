@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strconv"
@@ -28,7 +29,7 @@ type chapterSummary struct {
 	Content string
 }
 
-const apiKey = "----"
+const apiKey = "sk-team2024-home-test-vP00R3HgNtYAroFA1rRbT3BlbkFJ6XTugV2XnCDwPKOnwg18"
 
 func buildNewChapter(rawContent string) *chapter {
 	lines := strings.Split(rawContent, "\n")
@@ -49,6 +50,9 @@ func buildNewChapter(rawContent string) *chapter {
 }
 
 func main() {
+	directory := "bin"
+	filename := "TheArtOfThinkingClearly_Summary.txt"
+
 	// Read the document
 	content, err := os.ReadFile("TheArtOfThinkingClearly.txt")
 	if err != nil {
@@ -81,17 +85,17 @@ func main() {
 		return summaries[i].Number < summaries[j].Number
 	})
 
+	// Combine summaries
 	var tempSummary []string
-
 	for _, summary := range summaries {
 		tempSummary = append(tempSummary, summary.Content)
 	}
-	// Combine summaries
+
 	finalSummary := strings.Join(tempSummary, "\n\n")
 	fmt.Println("Final Summary:\n", finalSummary)
-	write_err := os.WriteFile("TheArtOfThinkingClearly_Summary.txt", []byte(finalSummary), 0644)
+	write_err := SaveToFile(directory, filename, content)
 	if write_err != nil {
-		fmt.Println("Error writing to file:", err)
+		println("Error:", err)
 		return
 	}
 
@@ -112,6 +116,31 @@ func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapter
 	chapterSummary.Content = summary       //summary
 	time.Sleep(time.Second)
 	fmt.Printf("Worker %v (%s): Finished\n", id, chapter.Title)
+}
+
+func SaveToFile(directory, filename string, content []byte) error {
+	// Create the directory if it doesn't exist
+	if err := os.MkdirAll(directory, 0755); err != nil {
+		return err
+	}
+
+	// Join the directory path and filename
+	filePath := filepath.Join(directory, filename)
+
+	// Create or open the file for writing
+	file, err := os.Create(filePath)
+	if err != nil {
+		return err
+	}
+	defer file.Close()
+
+	// Write the content to the file
+	_, err = file.Write(content)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
 
 func splitIntoChapterList(content string) []chapter {
