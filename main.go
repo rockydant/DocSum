@@ -73,13 +73,13 @@ func main() {
 	wg.Add(len(chapters))
 
 	for i, chapter := range chapters {
-		fmt.Printf("Adding worker %d. Title: %s\n", i, chapter.Title)
+		log.Printf("Adding worker %d. Title: %s\n", i, chapter.Title)
 		go worker(&wg, i, chapter, &summaries[i], client)
 	}
 
-	fmt.Printf("Waiting for %d workers to finish\n", len(chapters))
+	log.Printf("Waiting for %d workers to finish\n", len(chapters))
 	wg.Wait()
-	fmt.Println("All Workers Completed")
+	log.Printf("All Workers Completed")
 
 	sort.Slice(summaries, func(i, j int) bool {
 		return summaries[i].Number < summaries[j].Number
@@ -92,14 +92,14 @@ func main() {
 	}
 
 	finalSummary := strings.Join(tempSummary, "\n\n")
-	fmt.Println("Final Summary:\n", finalSummary)
+	log.Printf("Final Summary:\n", finalSummary)
 	write_err := SaveToFile(directory, filename, content)
 	if write_err != nil {
 		println("Error:", err)
 		return
 	}
 
-	fmt.Println("File written successfully")
+	log.Printf("File written successfully")
 }
 
 func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapterSummary, client *openai.Client) {
@@ -160,43 +160,25 @@ func splitIntoChapterList(content string) []chapter {
 	return chapters
 }
 
-func splitIntoChapters(content string) []string {
-	re := regexp.MustCompile(`(?m)^\d+\n(?:[^\n]+\n)+`)
-	// Find all matches and split the content accordingly
-	matches := re.FindAllStringIndex(content, -1)
-
-	var chapters []string
-	for i, match := range matches {
-		start := match[0]
-		end := len(content)
-		if i+1 < len(matches) {
-			end = matches[i+1][0]
-		}
-		chapters = append(chapters, content[start:end])
-	}
-
-	return chapters
-}
-
 func summarizeChapter_ollama(chapter chapter) (string, error) {
 	oc := ollamaclient.NewWithModel("mistral:latest")
 
 	oc.Verbose = false
 
 	if err := oc.PullIfNeeded(); err != nil {
-		fmt.Println("Error:", err)
+		log.Printf("Error:", err)
 		return "Error", err
 	}
 
 	prompt := fmt.Sprintf("Summarize this chapter with title %s and brief %s and content %s", chapter.Title, chapter.QuickBrief, chapter.Content)
 	output, err := oc.GetOutput(prompt)
 	if err != nil {
-		fmt.Println("Error:", err)
+		log.Printf("Error:", err)
 		return "Error", err
 	}
 	//fmt.Printf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(output))
 
-	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(output))
+	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n\n%s", chapter.Number, strings.TrimSpace(output))
 
 	return response, nil
 }
@@ -213,7 +195,7 @@ func summarizeChapter_openai(client *openai.Client, chapter chapter) (string, er
 		return "", err
 	}
 
-	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n%s", chapter.Number, strings.TrimSpace(resp.Choices[0].Text))
+	response := fmt.Sprintf("\n------ Summary of Chapter %d:\n\n%s", chapter.Number, strings.TrimSpace(resp.Choices[0].Text))
 
 	return response, nil
 }
