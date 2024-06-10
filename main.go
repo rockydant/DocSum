@@ -52,6 +52,8 @@ func buildNewChapter(rawContent string) *chapter {
 func main() {
 	start := time.Now()
 
+	// Define command-line arguments
+	arg0 := flag.Int("max", 3, "max threads allowed")
 	arg1 := flag.String("input", "TheArtOfThinkingClearly.txt", "input file")
 	arg2 := flag.String("output", "TheArtOfThinkingClearly_Summary.txt", "output file")
 	arg3 := flag.String("key", "", "OpenAI Key")
@@ -59,6 +61,7 @@ func main() {
 	// Parse command-line arguments
 	flag.Parse()
 
+	max_concurrency := *arg0
 	fileName := *arg1
 	savedFile := *arg2
 	inputKey := *arg3
@@ -109,9 +112,11 @@ func main() {
 	var wg sync.WaitGroup
 	wg.Add(len(chapters))
 
+	semaphore := make(chan struct{}, max_concurrency)
+
 	for i, chapter := range chapters {
 		log.Printf("Adding worker %d. Title: %s\n", i, chapter.Title)
-		go worker(&wg, i, chapter, &summaries[i], client)
+		go worker(&wg, i, chapter, &summaries[i], semaphore, client)
 	}
 
 	log.Printf("Waiting for %d workers to finish\n", len(chapters))
@@ -141,8 +146,11 @@ func main() {
 
 }
 
-func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapterSummary, client *openai.Client) {
+func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapterSummary, semaphore chan struct{}, client *openai.Client) {
 	defer wg.Done()
+
+	// Acquire semaphore
+	semaphore <- struct{}{}
 
 	fmt.Printf("Worker %v (%s): Started\n", id, chapter.Title)
 	//summary, err := summarizeChapter_ollama(chapter)
@@ -155,6 +163,9 @@ func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapter
 	chapterSummary.Content = summary       //summary
 	time.Sleep(time.Second)
 	fmt.Printf("Worker %v (%s): Finished\n", id, chapter.Title)
+
+	// Release semaphore
+	<-semaphore
 }
 
 func SaveToFile(directory, filename string, content []byte) error {
