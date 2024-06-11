@@ -7,9 +7,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -17,36 +15,16 @@ import (
 	"github.com/joho/godotenv"
 	openai "github.com/sashabaranov/go-openai"
 	"github.com/xyproto/ollamaclient"
+	"gorm.io/driver/mysql"
+	"gorm.io/gorm"
 )
 
-type chapter struct {
-	Number     int
-	Title      string
-	QuickBrief string
-	Content    string
-}
-
-type chapterSummary struct {
-	Number  int
-	Content string
-}
-
-func buildNewChapter(rawContent string) *chapter {
-	lines := strings.Split(rawContent, "\n")
-
-	chapterNumber := lines[0]
-	chapterTitle := lines[1]
-	summary := lines[2]
-	content := strings.Join(lines[3:], "\n")
-
-	i, err := strconv.Atoi(chapterNumber)
-	if err != nil {
-		// ... handle error
-		panic(err)
-	}
-
-	newChapter := chapter{Number: i, Title: chapterTitle, QuickBrief: summary, Content: content}
-	return &newChapter
+type Book struct {
+	ID           uint      `gorm:"primaryKey"`
+	Title        string    `gorm:"type:varchar(255)"`
+	Content      []byte    `gorm:"type:mediumblob"`
+	Summary      []byte    `gorm:"type:mediumblob"`
+	Publish_Time time.Time `gorm:"type:datetime"`
 }
 
 func main() {
@@ -135,11 +113,26 @@ func main() {
 
 	finalSummary := strings.Join(tempSummary, "\n\n")
 	log.Printf("Final Summary:\n", finalSummary)
-	write_err := SaveToFile(directory, savedFile, content)
+	outputPath, write_err := SaveToFile(directory, savedFile, []byte(finalSummary))
 	if write_err != nil {
 		println("Error:", err)
 		return
 	}
+
+	fmt.Println(max_concurrency)
+	// save files to database
+	db, err := connectToDatabase()
+	if err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	if err := createDocument(db, fileName, fileName, outputPath); err != nil {
+		fmt.Println("Error:", err)
+		return
+	}
+
+	fmt.Println("New record created successfully!")
 
 	duration := time.Since(start)
 	log.Printf("Executed successfully in %s", duration)
@@ -168,10 +161,10 @@ func worker(wg *sync.WaitGroup, id int, chapter chapter, chapterSummary *chapter
 	<-semaphore
 }
 
-func SaveToFile(directory, filename string, content []byte) error {
+func SaveToFile(directory, filename string, content []byte) (string, error) {
 	// Create the directory if it doesn't exist
 	if err := os.MkdirAll(directory, 0755); err != nil {
-		return err
+		return "", err
 	}
 
 	// Join the directory path and filename
@@ -180,34 +173,61 @@ func SaveToFile(directory, filename string, content []byte) error {
 	// Create or open the file for writing
 	file, err := os.Create(filePath)
 	if err != nil {
-		return err
+		return "", err
 	}
 	defer file.Close()
 
 	// Write the content to the file
 	_, err = file.Write(content)
 	if err != nil {
-		return err
+		return "", err
+	}
+
+	return filePath, nil
+}
+
+func connectToDatabase() (*gorm.DB, error) {
+	// Replace the following variables with your actual database connection details
+	username := "docsum"
+	password := "12345678"
+	hostname := "localhost"
+	dbname := "doc_sum"
+
+	dsn := fmt.Sprintf("%s:%s@tcp(%s)/%s?charset=utf8mb4&parseTime=True&loc=Local", username, password, hostname, dbname)
+	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to connect to database: %w", err)
+	}
+
+	return db, nil
+}
+
+func createDocument(db *gorm.DB, title string, inputFilePath string, outputFilePath string) error {
+	// Read file content
+	inputFileContent, err := os.ReadFile(inputFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	outputFileContent, err := os.ReadFile(outputFilePath)
+	if err != nil {
+		return fmt.Errorf("failed to read file: %w", err)
+	}
+
+	// Create a new document record
+	doc := Book{
+		Title:        title,
+		Content:      inputFileContent,
+		Summary:      outputFileContent,
+		Publish_Time: time.Now(),
+	}
+
+	// Insert the record into the database
+	if err := db.Create(&doc).Error; err != nil {
+		return fmt.Errorf("failed to create record: %w", err)
 	}
 
 	return nil
-}
-
-func splitIntoChapterList(content string) []chapter {
-	re := regexp.MustCompile(`(?m)^\d+\n(?:[^\n]+\n)+`)
-	matches := re.FindAllStringIndex(content, -1)
-	var chapters []chapter
-	for i, match := range matches {
-		start := match[0]
-		end := len(content)
-		if i+1 < len(matches) {
-			end = matches[i+1][0]
-		}
-
-		chapters = append(chapters, *buildNewChapter(content[start:end]))
-	}
-
-	return chapters
 }
 
 func summarizeChapter_ollama(chapter chapter) (string, error) {
